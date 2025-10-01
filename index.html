@@ -10,6 +10,8 @@
         body {
             font-family: 'Inter', sans-serif;
             background-color: #f0f2f5;
+            /* Prevent pull-to-refresh and other gestures on the body */
+            overscroll-behavior-y: contain;
         }
         .canvas-container {
             width: 100%;
@@ -19,10 +21,12 @@
             background-color: white;
             box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
             cursor: pointer;
+            /* For touch interactions on the canvas */
+            touch-action: none;
         }
     </style>
 </head>
-<body class="p-4 md:p-8">
+<body class="p-2 sm:p-4 md:p-8">
 
     <div class="max-w-7xl mx-auto">
         <header class="text-center mb-6">
@@ -132,7 +136,7 @@
             { symbol: 'CRSP', name: 'CRISPR Therapeutics AG', price: 57.1, change: 1.05, changePercent: '1.87%' },
             { symbol: 'CRVS', name: 'Corrus Pharmaceuticals Holdings Inc.', price: 0.22, change: 0.01, changePercent: '2.56%' },
             { symbol: 'CSTL', name: 'Castle Biosciences Inc.', price: 19.33, change: 0.38, changePercent: '2.01%' },
-            { symbol: 'CTRN', name: 'Citrus Tower Inc.', price: '--', change: '--', changePercent: '--' },
+            { symbol: 'CTRN', name: 'Citi Trends, Inc.', price: '--', change: '--', changePercent: '--' },
             { symbol: 'CURLF', name: 'Curlato Holdings Inc.', price: 2.55, change: -0.04, changePercent: '-1.54%' },
             { symbol: 'CXDO', name: 'CXApp Inc.', price: 0.12, change: 0, changePercent: '0.00%' },
             { symbol: 'CYTK', name: 'Cytokinetics Inc.', price: 51.58, change: 0.62, changePercent: '1.22%' },
@@ -161,7 +165,7 @@
             { symbol: 'EXEL', name: 'Exelixis Inc.', price: 22.3, change: 0.13, changePercent: '0.59%' },
             { symbol: 'EXXRF', name: 'Excelerate Energy Inc.', price: 17.5, change: 0, changePercent: '0.00%' },
             { symbol: 'EYPT', name: 'EyePoint Pharmaceuticals Inc.', price: 21.05, change: 0.78, changePercent: '3.85%' },
-            { symbol: 'FA', name: 'Fleetcor Technologies Inc.', price: 285.8, change: 1.01, changePercent: '0.35%' },
+            { symbol: 'FA', name: 'First Advantage Corp', price: 285.8, change: 1.01, changePercent: '0.35%' },
             { symbol: 'FAT', name: 'FAT Brands Inc.', price: 6.55, change: 0, changePercent: '0.00%' },
             { symbol: 'FATBP', name: 'FAT Brands Inc. Preferred', price: 4.8, change: 0, changePercent: '0.00%' },
             { symbol: 'FIG', name: 'Fortress Investment Group LLC', price: 8, change: 0, changePercent: '0.00%' },
@@ -398,15 +402,42 @@
         let sortColumn = 'symbol';
         let sortDirection = 'asc';
         let scrollY = 0;
+        let scrollX = 0;
+        
+        // --- Touch handling variables ---
+        let isDragging = false;
+        let lastTouchX = 0;
+        let lastTouchY = 0;
         
         const rowHeight = 40;
         const headerHeight = 50;
+
+        // Switched to fixed widths for columns to enable horizontal scrolling
+        const columns = [
+            { name: 'Symbol', width: 120, key: 'symbol', align: 'left' },
+            { name: 'Name', width: 280, key: 'name', align: 'left' },
+            { name: 'Price', width: 100, key: 'price', align: 'center' },
+            { name: 'Change', width: 100, key: 'change', align: 'center' },
+            { name: '% Change', width: 100, key: 'changePercent', align: 'center' }
+        ];
+        const totalContentWidth = columns.reduce((sum, col) => sum + col.width, 0);
+
 
         function resizeCanvas() {
             const container = canvas.parentElement;
             canvas.width = container.clientWidth;
             canvas.height = container.clientHeight;
+            // Clamp scroll positions on resize
+            clampScroll();
             draw();
+        }
+
+        function clampScroll() {
+            const maxScrollY = Math.max(0, filteredStocks.length * rowHeight - canvas.height + headerHeight);
+            scrollY = Math.max(0, Math.min(scrollY, maxScrollY));
+
+            const maxScrollX = Math.max(0, totalContentWidth - canvas.width);
+            scrollX = Math.max(0, Math.min(scrollX, maxScrollX));
         }
 
         function filterAndSort() {
@@ -435,6 +466,7 @@
             });
 
             scrollY = 0;
+            scrollX = 0;
             draw();
         }
 
@@ -442,16 +474,16 @@
             ctx.clearRect(0, 0, canvas.width, canvas.height);
             drawHeader();
             drawRows();
+
+            // Draw a subtle hint for horizontal scrolling on mobile
+            if (totalContentWidth > canvas.width) {
+                 ctx.fillStyle = 'rgba(0, 0, 0, 0.4)';
+                 ctx.font = '12px Inter';
+                 ctx.textAlign = 'right';
+                 ctx.fillText('scroll for more →', canvas.width - 10, canvas.height - 10);
+            }
         }
         
-        const columns = [
-            { name: 'Symbol', width: 0.15, key: 'symbol', align: 'left' },
-            { name: 'Name', width: 0.40, key: 'name', align: 'left' },
-            { name: 'Price', width: 0.15, key: 'price', align: 'center' },
-            { name: 'Change', width: 0.15, key: 'change', align: 'center' },
-            { name: '% Change', width: 0.15, key: 'changePercent', align: 'center' }
-        ];
-
         function drawHeader() {
             ctx.fillStyle = '#374151'; // gray-700
             ctx.fillRect(0, 0, canvas.width, headerHeight);
@@ -460,9 +492,9 @@
             ctx.fillStyle = 'white';
             ctx.textBaseline = 'middle';
 
-            let x = 0;
+            let x = -scrollX;
             columns.forEach(col => {
-                const colWidth = canvas.width * col.width;
+                const colWidth = col.width;
                 let text = col.name;
                 if (col.key === sortColumn) {
                     text += sortDirection === 'asc' ? ' ▲' : ' ▼';
@@ -488,9 +520,9 @@
                 ctx.fillStyle = i % 2 === 0 ? '#F9FAFB' : 'white'; // gray-50
                 ctx.fillRect(0, y, canvas.width, rowHeight);
                 
-                let x = 0;
+                let x = -scrollX;
                 columns.forEach(col => {
-                    const colWidth = canvas.width * col.width;
+                    const colWidth = col.width;
                     ctx.textAlign = col.align;
                     let textX = (col.align === 'left') ? x + 10 : x + colWidth / 2;
                     
@@ -538,21 +570,24 @@
         canvas.addEventListener('wheel', e => {
             e.preventDefault();
             scrollY += e.deltaY;
-            const maxScroll = Math.max(0, filteredStocks.length * rowHeight - canvas.height + headerHeight);
-            scrollY = Math.max(0, Math.min(scrollY, maxScroll));
+            clampScroll();
             draw();
         });
 
         canvas.addEventListener('click', e => {
+            if (isDragging) { // Don't register clicks if it was a drag
+                isDragging = false;
+                return;
+            }
             const rect = canvas.getBoundingClientRect();
             const y = e.clientY - rect.top;
             const x = e.clientX - rect.left;
             
             if (y <= headerHeight) { // Header click for sorting
+                const virtualX = x + scrollX;
                 let currentX = 0;
                 for(const col of columns) {
-                    currentX += col.width * canvas.width;
-                    if(x < currentX) {
+                    if(virtualX >= currentX && virtualX <= currentX + col.width) {
                         if (sortColumn === col.key) {
                             sortDirection = sortDirection === 'asc' ? 'desc' : 'asc';
                         } else {
@@ -562,10 +597,11 @@
                         filterAndSort();
                         break;
                     }
+                    currentX += col.width;
                 }
             } else { // Row click for hyperlink
-                const symbolColWidth = canvas.width * columns[0].width;
-                if (x <= symbolColWidth) {
+                const virtualX = x + scrollX;
+                if (virtualX <= columns[0].width) {
                      const rowIndex = Math.floor((scrollY + y - headerHeight) / rowHeight);
                      const stock = filteredStocks[rowIndex];
                      if(stock) {
@@ -575,6 +611,33 @@
                 }
             }
         });
+        
+        // --- Touch Listeners for mobile scrolling ---
+        canvas.addEventListener('touchstart', e => {
+            isDragging = false; // Reset on new touch
+            lastTouchX = e.touches[0].clientX;
+            lastTouchY = e.touches[0].clientY;
+        });
+
+        canvas.addEventListener('touchmove', e => {
+            e.preventDefault(); // Prevents browser from scrolling page
+            isDragging = true;
+            const touchX = e.touches[0].clientX;
+            const touchY = e.touches[0].clientY;
+            
+            const deltaX = touchX - lastTouchX;
+            const deltaY = touchY - lastTouchY;
+            
+            scrollX -= deltaX;
+            scrollY -= deltaY;
+
+            clampScroll();
+            draw();
+            
+            lastTouchX = touchX;
+            lastTouchY = touchY;
+        });
+
 
         // Initial setup
         filterAndSort();
