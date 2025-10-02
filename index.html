@@ -571,7 +571,25 @@
                      const rowIndex = Math.floor((scrollY + y - headerHeight) / rowHeight);
                      const stock = filteredStocks[rowIndex];
                      if(stock) {
-                        const url = `https://www.google.com/search?q=${stock.symbol}`;
+                        let symbol = stock.symbol;
+                        let url;
+
+                        if (symbol.includes('-USD')) {
+                            // Crypto has no exchange in the quote, e.g. XRP-USD
+                            url = `https://www.google.com/finance/quote/${symbol}`;
+                        } else if (symbol.includes(':')) {
+                            // Handle symbols that already have an exchange, e.g., WEED:CA
+                            const [ticker, exchangeCode] = symbol.split(':');
+                            // Map Canadian exchange from ':CA' to what Google Finance expects ':TSE'
+                            const exchange = exchangeCode === 'CA' ? 'TSE' : exchangeCode; 
+                            url = `https://www.google.com/finance/quote/${ticker}:${exchange}`;
+                        } else {
+                            // For US stocks, we have to guess the exchange. This is a heuristic.
+                            // A common pattern is 1-3 letters for NYSE, 4+ for NASDAQ.
+                            // Symbols with a '.' (like class shares) are also typically on NYSE.
+                            const exchange = (symbol.length <= 3 || symbol.includes('.')) ? 'NYSE' : 'NASDAQ';
+                            url = `https://www.google.com/finance/quote/${symbol}:${exchange}`;
+                        }
                         window.open(url, '_blank');
                      }
                 }
@@ -587,4 +605,6 @@
     </script>
 </body>
 </html>
+
+
 
